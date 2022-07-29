@@ -141,7 +141,7 @@ class Strategy:
             leverage = self.risk_management["leverage"]
 
             amount = 10
-            dict_order = {"symbol":symbol,"tp":tp,"sl":sl,"leverage":leverage,"amount":amount,"side":side}
+            dict_order = {"symbol":symbol,"take_profit":tp,"stop_loss":sl,"leverage":leverage,"amount":amount,"side":side}
             orders.append(dict_order)
         return orders
 
@@ -405,7 +405,7 @@ class Backtester:
             self.crear_orden_backtest(
                 fecha,order["symbol"],
                 order["side"],order["amount"],type = "MARKET",
-                take_profit = order["tp"],stop_loss = order["sl"],leverage = order["leverage"])
+                take_profit = order["take_profit"],stop_loss = order["stop_loss"],leverage = order["leverage"])
         return []
 
     def close_trades(self,timestamp,to_close):
@@ -505,10 +505,10 @@ class TripleTimeBands(Strategy):
                 continue
         
         candidatos = [x for x in candidatos if x[1] != 0]
-        # print(candidatos)
-        # candidatos = [(x[0],1) for x in candidatos]
-        # return candidatos[:espacios_disponibles]
+
         return candidatos
+        # return [("BTCUSDT",-1)]
+
 
     def check_exits(self,timestamp,data,portafolio):
         if len(portafolio) == 0:
@@ -538,8 +538,22 @@ class TripleTimeBands(Strategy):
             except:
                 continue          
         return cerrar
-        pass
+        # return ["ETHUSDT"]
 
+        pass
+    def set_risk_management(self,cash,positions):
+        orders = []
+        for pos in positions:
+            symbol = pos[0]
+            side = pos[1]
+            tp = self.risk_management["take_profit"]
+            sl = self.risk_management["stop_loss"]
+            leverage = self.risk_management["leverage"]
+
+            amount = 5
+            dict_order = {"symbol":symbol,"take_profit":tp,"stop_loss":sl,"leverage":leverage,"amount":amount,"side":side}
+            orders.append(dict_order)
+        return orders
 
 
 if __name__ == '__main__':
@@ -547,6 +561,6 @@ if __name__ == '__main__':
     dh = DataHandler(db_file)
     strat = TripleTimeBands()
     btester = Backtester(strat,dh)
-    btester.realizar_backtesting(start_date = "2021-01",end_date = "2022-02")
+    btester.realizar_backtesting(start_date = "2022-07",end_date = "2022-08")
     btester.imprimir_resultados()
-    print(btester.trades)
+    btester.trades.to_csv("Resultados.csv")

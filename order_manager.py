@@ -112,21 +112,22 @@ class OrderManager:
                     symbol = pos["symbol"]
                     amount = pos["positionAmt"]
                     margin = pos["isolatedMargin"]
-                    dic_pos = {"amount": amount,"margin":margin}
-                    list_pos.append((symbol,dic_pos))
+                    dic_pos = {"symbol":symbol,"amount": amount,"margin":margin}
+                    list_pos.append(dic_pos)
 
             print(posiciones_info)
             return list_pos
         except  Exception as e:
             print("Exception in get_posiciones",e)
             print(type(e))
+            # return []
             
 
     def eliminar_ordenes(self):
         posiciones = self.get_posiciones()
         lista_posiciones = []
         for posicion in posiciones:
-            pos = list(posicion.keys())[0]
+            pos = list(posicion.keys())["symbol"]
             lista_posiciones.append(pos)
         ordenes = self.binance_client.futures_get_open_orders()
 
@@ -139,8 +140,17 @@ class OrderManager:
             else:
                 self.binance_client.futures_cancel_order(symbol = symbol,orderId = id)
 
-            
-            
+    def eliminar_orden(self,symbol):
+        ordenes_abiertas = self.binance_client.futures_get_open_orders()
+        for orden in ordenes_abiertas:
+            id = orden["orderId"]
+            symbol_orden = orden["symbol"]
+            if symbol ==symbol_orden:
+                self.binance_client.futures_cancel_order(symbol = symbol,orderId = id)
+
+            else:
+                continue
+   
 
     def close_position(self,symbol,amount,side = "SELL"):
         if side == 1:

@@ -38,6 +38,7 @@ class BinanceFuturesAdapter(BrokerAdapter):
         super().__init__("BinanceFutures")
         self.binance_client = self.connectar_client()
         self.create()
+        self.restart = False
 
         self.intraday_symbols = {"5m":["BTCUSDT","ETHUSDT","BNBUSDT","ADAUSDT"],
                                 "15m":["BTCUSDT","ETHUSDT"],
@@ -69,6 +70,13 @@ class BinanceFuturesAdapter(BrokerAdapter):
         binance_client = Client(api_key = self.api_dic["key"],api_secret = self.api_dic["secret"])
         print(f"Conectado a {self.name} client")   
         return binance_client
+        
+    def reconnect_client(self):
+        binance_client = Client(api_key = self.api_dic["key"],api_secret = self.api_dic["secret"])
+        print(f"Conectado a {self.name} client")   
+
+        self.binance_client = binance_client
+
 
     def guardar_kline(self,kline):
         open_time = kline["t"]
@@ -316,9 +324,14 @@ class BinanceFuturesAdapter(BrokerAdapter):
         ubwa.create_stream(klines,symbols,output= "dict")
         while True:
             oldest_data_from_stream_buffer = ubwa.pop_stream_data_from_stream_buffer()
+            if self.restart == True:
+                print("Restarting websocket")
+                break
             if oldest_data_from_stream_buffer:
                 self.procesar_mensajes(oldest_data_from_stream_buffer,event)
 
+    def set_restart(self):
+        self.restart = True
     def procesar_mensajes(self,mensaje,event):
         try :
             kline = mensaje["data"]["k"]
@@ -345,20 +358,19 @@ class BinanceFuturesAdapter(BrokerAdapter):
 
                 print("kline guardada")
                 event.set()
-                if self.thread_update.isAlive():
-                    print("Aun estamos carrgando")
-                    print("-"*20)
-                    self.buffer.append(kline)
-                    print(self.buffer)
-                    print("-"*20)
+
                     
                 
         except :
             print(mensaje)
+        
+        finally:
+            return 
 
     def stream_15m(self,event):
         # self.thread_update = threading.Thread(target = self.actualizacion_15m())
         # self.thread_update.start()
+        self.restart = False
         self.actualizacion_15m()
         self.actualizacion_15m()
         self.stream_market(self.intraday_symbols["15m"],["kline_15m"],event)

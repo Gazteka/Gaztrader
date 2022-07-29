@@ -24,13 +24,24 @@ class MarketAdapter:
         for adapter in self.adaptadores:
             self.adaptadores[adapter].actualizacion_completa()
 
+    def set_restart(self):
+        self.reconnect_client()
+        for adapter in self.adaptadores:
+            self.adaptadores[adapter].set_restart()
+
+        print("Restart setted")
     def stream_market(self,event):
         self.adaptadores["BinanceFutures"].stream_15m(event)
     def get_local(self,symbols,n,timeframe):
         for adapter in self.adaptadores:
             dic_data = self.adaptadores[adapter].get_local(symbols,n,timeframe)
         return dic_data
-
+    
+    def reconnect_client(self):
+        for adapter in self.adaptadores:
+            self.adaptadores[adapter].reconnect_client()
+        cliente  = self.adaptadores["BinanceFutures"].binance_client
+        self.order_manager = OrderManager(cliente)
     
 if  __name__=='__main__':
 

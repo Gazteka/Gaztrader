@@ -11,6 +11,7 @@ from binance import Client
 import random
 import requests
 import sys
+import telebot
 from PyQt5.QtWidgets import (
     QComboBox, QGridLayout, QLabel, QScrollArea, QWidget, QLineEdit, QHBoxLayout,QCheckBox,
     QVBoxLayout, QPushButton, QApplication,QGroupBox,QTableWidget,QTableWidgetItem,QTabWidget)
