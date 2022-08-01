@@ -5,6 +5,7 @@ import os
 import datetime
 import sqlite3
 import matplotlib.pyplot as plt
+import time
 
 def cret(data, last_row=False):
     df = ((1+data).cumprod(axis=0)-1)
@@ -16,6 +17,21 @@ def sharpe_ratio(serie):
     mean = serie.mean()
     std = serie.std()
     return mean/std
+
+def timer(funcion):
+    """
+    Se crea un decorador (googlear) del tipo timer para testear el tiempo
+    de ejecucion del programa
+    """
+    def inner(*args, **kwargs):
+
+        inicio = time.time()
+        resultado = funcion(*args, **kwargs)
+        final = round(time.time() - inicio, 3)
+        print("\nTiempo de ejecucion total: {}[s]".format(final))
+
+        return resultado
+    return inner
 
 
 class DataHandler:
@@ -43,6 +59,7 @@ class DataHandler:
             return dic_data
         elif df.shape[1] == 15:
             print("Spot")
+    @timer
     def get_local(self,timeframe,limit = 15000):
         self.cursor.execute(f"""SELECT *  FROM crypto_prices_binance WHERE crypto_prices_binance.timeframe = '{timeframe}'
         ORDER BY open_time DESC LIMIT {limit} """)
@@ -63,7 +80,23 @@ class DataHandler:
             return dic_data
         elif df.shape[1] == 15:
             print("Spot")
+    @timer
+    def get_live(self,timeframe,limit = 15000):
+        self.cursor.execute(f"""SELECT open_time,crypto_symbol,close,close_time  FROM crypto_prices_binance WHERE crypto_prices_binance.timeframe = '{timeframe}'
+        ORDER BY open_time DESC LIMIT {limit} """)
+        data = self.cursor.fetchall()
+        df = pd.DataFrame(data)
+        df.columns = ["open_time","symbol","close","close_time"]
+        df = df.iloc[::-1]
+        df["open_time"] == pd.to_datetime(df["open_time"])
+        df["close_time"] == pd.to_datetime(df["close_time"])
 
+        df.index = df["open_time"]
+        dic_data ={}
+        symbols = set(df["symbol"])
+        for symbol in symbols:
+            dic_data[symbol] = df[df["symbol"] == symbol]
+        return dic_data
 class Strategy:
 
     def __init__(self):
@@ -472,13 +505,58 @@ class TripleTimeBands(Strategy):
                 self.dataset_macro[symbol] = {"2H":data_2h,"12H":data_12h}
                 new_dataset[symbol] = data_15m
             except Exception as e:
-                # print(e)
+                print(e)
 
                 continue
 
         # print(new_dataset)
         return new_dataset
+    def math_live(self,dataset):
+        new_dataset = {}
+        self.dataset_macro = {}
+        for symbol in dataset:
+            try:
+                data_15m = dataset[symbol]
+                data_15m.index = pd.to_datetime(data_15m["close_time"])
+                resample_dict = {"close":"last",
+                                    "close_time":"last","symbol":"first",
+                                    "open_time":"first"}
+                data_2h = data_15m.resample("2H",offset= "21:00:00").apply(resample_dict)
+                data_12h = data_15m.resample("12H",offset= "21:00:00").apply(resample_dict)
 
+                data_12h["100_mm"] = data_12h["close"].rolling(100).mean()
+                data_12h["r"] = data_12h["close"].pct_change()
+                data_12h["100_vol"] = data_12h["r"].rolling(100).std()
+
+                data_12h["100_vol_mm"] = data_12h["100_vol"].rolling(100).mean()
+                vol_cond = data_12h["100_vol"] > data_12h["100_vol_mm"]
+                regime_cond = data_12h["100_mm"] < data_12h["close"]
+                data_2h["r"] = data_2h["close"].pct_change()
+                data_2h["84_mm"] = data_2h["close"].rolling(84).mean()
+                data_2h["84_std"] = data_2h["close"].rolling(84).std()
+                data_2h["bb_up"] = data_2h["84_mm"] + data_2h["84_std"]
+                data_2h["bb_down"] = data_2h["84_mm"] - data_2h["84_std"]
+                overbought = data_2h["close"] > data_2h["bb_up"]
+                oversold = data_2h["close"] < data_2h["bb_down"]
+                in_range = (data_2h["close"] > data_2h["bb_down"])&(data_2h["close"] < data_2h["bb_up"])
+                data_12h["regime"] = np.zeros(data_12h.shape[0])
+                data_12h.loc[vol_cond&regime_cond,"regime"] = 4
+                data_12h.loc[~vol_cond&regime_cond,"regime"] = 3
+                data_12h.loc[vol_cond&~regime_cond,"regime"] = 1
+                data_12h.loc[~vol_cond&~regime_cond,"regime"] = 2
+                data_2h["status"] = np.zeros(data_2h.shape[0])
+                data_2h.loc[oversold,"status"] = -1
+                data_2h.loc[overbought,"status"] = 1
+                data_2h.loc[in_range,"status"] = 0
+                self.dataset_macro[symbol] = {"2H":data_2h,"12H":data_12h}
+                new_dataset[symbol] = data_15m
+            except Exception as e:
+                print(e)
+
+                continue
+
+        # print(new_dataset)
+        return new_dataset
     def check_entries(self,timestamp,data,portafolio):
         candidatos = []
         espacios_disponibles = self.get_available_spaces(portafolio)
@@ -501,7 +579,8 @@ class TripleTimeBands(Strategy):
                     
                 candidatos.append((symbol,pos))
                 
-            except:
+            except Exception as e:
+                # print(e)
                 continue
         
         candidatos = [x for x in candidatos if x[1] != 0]
@@ -559,8 +638,13 @@ class TripleTimeBands(Strategy):
 if __name__ == '__main__':
     db_file = os.path.join("Databases","BinanceFutures.db")
     dh = DataHandler(db_file)
+    data = dh.get_local("15m",100000)
     strat = TripleTimeBands()
-    btester = Backtester(strat,dh)
-    btester.realizar_backtesting(start_date = "2022-07",end_date = "2022-08")
-    btester.imprimir_resultados()
-    btester.trades.to_csv("Resultados.csv")
+    s_data = strat.math(data)
+    last_ts = s_data["BTCUSDT"].index[-1]
+    print(last_ts)
+    print(strat.check_entries(last_ts,s_data,[]))
+    # btester = Backtester(strat,dh)
+    # btester.realizar_backtesting(start_date = "2022-07",end_date = "2022-08")
+    # btester.imprimir_resultados()
+    # btester.trades.to_csv("Resultados.csv")
