@@ -129,7 +129,7 @@ class ComplexEventProcessing:
                 self.market_adapter.reconnect_client()
                 self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
 
-                dic_data = self.datahandler.get_local("15m",10000)
+                dic_data = self.datahandler.get_local("15m",10000*2))
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.strategy_dataset = self.strategy.math(dic_data)
                 last_timestamp = self.strategy_dataset["BTCUSDT"].index[-1]
