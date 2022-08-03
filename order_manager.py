@@ -120,7 +120,7 @@ class OrderManager:
         except  Exception as e:
             print("Exception in get_posiciones",e)
             print(type(e))
-            # return []
+            return 0
             
 
     def eliminar_ordenes(self):

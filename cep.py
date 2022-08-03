@@ -104,7 +104,8 @@ class ComplexEventProcessing:
     def __init__(self,market_adapter,telegram_bot):
         self.market_adapter = market_adapter
         self.telegram_bot = telegram_bot
-        self.symbols_usables = ["BTCUSDT","ETHUSDT"]
+        self.symbols_usables = ["BTCUSDT","ETHUSDT","MATICUSDT",
+                        "FTMUSDT","STMXUSDT","COTIUSDT","DUSKUSDT","SANDUSDT"]
         self.timeframes_usables = ["kline_15m"]
         self.strategy  = TripleTimeBands()
         self.lock = threading.Lock()
@@ -127,11 +128,20 @@ class ComplexEventProcessing:
                 print("Obteniendo data")
                 self.lock.acquire()
                 self.market_adapter.reconnect_client()
-                self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
+                self.portafolio_actual = 0
+                while self.portafolio_actual == 0:
+                    try :
+                        print("Obteniendo portafolio")
+                        self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
 
-                dic_data = self.datahandler.get_local("15m",10000*2))
+                    except :
+                        time.sleep(5)
+                        self.market_adapter.reconnect_client()
+                print("Portafolio actual ",self.portafolio_actual)
+                operables = len(self.symbols_usables)
+                dic_data = self.datahandler.get_live("15m",10000*operables)
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.strategy_dataset = self.strategy.math(dic_data)
+                self.strategy_dataset = self.strategy.math_live(dic_data)
                 last_timestamp = self.strategy_dataset["BTCUSDT"].index[-1]
                 print(last_timestamp)
                 to_close_positions = self.strategy.check_exits(last_timestamp,self.strategy_dataset,self.portafolio_actual)

@@ -41,7 +41,8 @@ class BinanceFuturesAdapter(BrokerAdapter):
         self.restart = False
 
         self.intraday_symbols = {"5m":["BTCUSDT","ETHUSDT","BNBUSDT","ADAUSDT"],
-                                "15m":["BTCUSDT","ETHUSDT"],
+                                "15m":["BTCUSDT","ETHUSDT","MATICUSDT",
+                        "FTMUSDT","STMXUSDT","COTIUSDT","DUSKUSDT","SANDUSDT"],
                     }
     def create(self):
         self.cursor.execute(f"""
