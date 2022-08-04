@@ -149,8 +149,12 @@ class ComplexEventProcessing:
                     self.close_trade(posicion)
                     print(f"Trade cerrado {posicion}")
                 self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
+                symbols = [x["symbol"] for x in self.portafolio_actual]
                 to_open_positions = self.strategy.check_entries(last_timestamp,self.strategy_dataset,self.portafolio_actual)
                 for posicion in to_open_positions:
+                    if posicion[0] in symbols:
+                        print("Ya existe una posicion para este activo")
+                        continue
                     self.send_trade(posicion[0],posicion[1])
                     print(f"Trade enviado para {posicion[0]},{posicion[1]}")
 
