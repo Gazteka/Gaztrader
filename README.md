@@ -11,7 +11,7 @@ Gaztrader es un software creado en python, para desarrollar sistemas de inversio
 <h2> Clases y funcionalidades </h2>
 
   <h3> Complex Event Processing(CEP) </h3>
-https://raw.githubusercontent.com/Gazteka/Gaztrader/main/Diagrams/cep
+https://raw.githubusercontent.com/Gazteka/Gaztrader/main/Diagrams/cep.png
 
 Esta clase se encarga de gestionar a todas las demas, es la base sobre la que funcionan las otras clases, se encarga de gestionar los datos en vivo,  recibidos a traves del Market Adapter, cuando se cierra una vela, se encarga de ejecutar la/s estrategia/s para verificar si existen señales de compra y/o venta.Por otro lado la informacion es extraida de la base de datos y entregada a la estrategia a través de un DataHandler, esto ya que es posible que una estrategia necesite informacion adicional a la de las velas, como la capitalizacion de mercado o de otros indicadores como el Fear & Greed Index.
 
