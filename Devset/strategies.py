@@ -460,7 +460,7 @@ class TripleTimeBands(Strategy):
         self.timeframe = "15m"
         self.broker = "BinanceFutures"
 
-        self.risk_management = {"pos_sizing":0.05,"take_profit":0.7,"stop_loss":0.1,"leverage":10}
+        self.risk_management = {"pos_sizing":0.05,"take_profit":0.05,"stop_loss":0.01,"leverage":15}
         self.max_posiciones = 3
 
     def math(self,dataset):
