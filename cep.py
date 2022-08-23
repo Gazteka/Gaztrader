@@ -4,6 +4,20 @@ from market_adapter import MarketAdapter, ADAPTERS_DICT
 from Devset.strategies import DataHandler, TripleTimeBands
 from multiprocessing import Process
 
+def timer(funcion):
+    """
+    Se crea un decorador (googlear) del tipo timer para testear el tiempo
+    de ejecucion del programa
+    """
+    def inner(*args, **kwargs):
+
+        inicio = time.time()
+        resultado = funcion(*args, **kwargs)
+        final = round(time.time() - inicio, 3)
+        print("\nTiempo de ejecucion total: {}[s]".format(final))
+
+        return resultado
+    return inner
 
 def convert_unix(timestamp):
 
@@ -127,50 +141,64 @@ class ComplexEventProcessing:
                 time.sleep(2)
                 print("Obteniendo data")
                 self.lock.acquire()
-                self.market_adapter.reconnect_client()
-                self.portafolio_actual = 0
-                while self.portafolio_actual == 0:
-                    try :
-                        print("Obteniendo portafolio")
-                        self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
-
-                    except :
-                        time.sleep(5)
-                        self.market_adapter.reconnect_client()
-                print("Portafolio actual ",self.portafolio_actual)
-                operables = len(self.symbols_usables)
-                dic_data = self.datahandler.get_live("15m",10000*operables)
+                self.manage_strategies()
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.strategy_dataset = self.strategy.math_live(dic_data)
-                last_timestamp = self.strategy_dataset["BTCUSDT"].index[-1]
-                print(last_timestamp)
-                to_close_positions = self.strategy.check_exits(last_timestamp,self.strategy_dataset,self.portafolio_actual)
-                for posicion in to_close_positions:
-                    self.close_trade(posicion)
-                    print(f"Trade cerrado {posicion}")
-                self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
-                symbols = [x["symbol"] for x in self.portafolio_actual]
-                to_open_positions = self.strategy.check_entries(last_timestamp,self.strategy_dataset,self.portafolio_actual)
-                for posicion in to_open_positions:
-                    if posicion[0] in symbols:
-                        print("Ya existe una posicion para este activo")
-                        continue
-                    self.send_trade(posicion[0],posicion[1])
-                    print(f"Trade enviado para {posicion[0]},{posicion[1]}")
-
-                print(to_open_positions)
-                self.portafolio_actual = self.market_adapter.order_manager.get_posiciones()
-                equity = self.market_adapter.order_manager.get_balance_total()
-                self.logger.set_status(equity,self.portafolio_actual)
-                
                 print(now)
                 self.lock.release()
                 event.clear()
             else:
                 time.sleep(1)
+    @timer
+    def manage_strategies(self):
+
+        broker = self.strategy.broker 
+        adaptador = self.market_adapter.adaptadores[broker]
+        portafolio_actual = 0
+        while portafolio_actual == 0:
+            try :
+                print("Obteniendo portafolio")
+                portafolio_actual = adaptador.order_manager.get_posiciones()
+
+            except  Exception as e:
+                print(e)
+                time.sleep(5)
+                #LOG
+                adaptador.reconnect_client()
+        symbols_operables = len(self.symbols_usables)
+
+        print("Portafolio actual :",portafolio_actual)
+        lookback_period = 10000
+        dataset = self.datahandler.get_live("15m",lookback_period*symbols_operables)
+        now_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.strategy_dataset = self.strategy.math_live(dataset)
+        last_timestamp = self.strategy_dataset["BTCUSDT"].index[-1]
+        print(self.strategy_dataset)
+        print(last_timestamp)   
+        to_close_positions = self.strategy.check_exits(last_timestamp,self.strategy_dataset,portafolio_actual)
+        print("Close",to_close_positions)
+        for posicion in to_close_positions:
+            self.close_trade(posicion,adaptador)
+            print(f"Trade cerrado {posicion}")
+        portafolio_actual = adaptador.order_manager.get_posiciones()
+        symbols = [x["symbol"] for x in portafolio_actual]
+        to_open_positions = self.strategy.check_entries(last_timestamp,self.strategy_dataset,portafolio_actual)            
+        print("to_open_positions",to_open_positions)
+
+        for posicion in to_open_positions:
+
+            if posicion[0] in symbols:
+                print("Ya existe una posicion para este activo",posicion[0])
+            else:
+                self.send_trade(posicion[0],posicion[1],adaptador)
+                print(f"Trade enviado para {posicion[0]},{posicion[1]}")
+        portafolio_actual = adaptador.order_manager.get_posiciones()
+        equity =adaptador.order_manager.get_balance_total()
+        self.logger.set_status(equity,portafolio_actual)
+
 
     def stream_market(self,event):
-        self.market_adapter.stream_market(event)
+        symbols_usables = self.symbols_usables
+        self.market_adapter.stream_market(symbols_usables,["kline_15m"],event)
         
     def set_restart(self):
         self.restart = True
@@ -206,13 +234,13 @@ class ComplexEventProcessing:
                 time.sleep(5)
 
 
-    def send_trade(self,symbol,side):
+    def send_trade(self,symbol,side,adapter):
         risk_management = self.strategy.risk_management
-        amount = self.market_adapter.order_manager.get_balance_total()
+        amount = adapter.order_manager.get_balance_total()
         order = self.strategy.set_risk_management(amount,[(symbol,side)])[0]
-        risk_dict = self.market_adapter.order_manager.set_risk_management(symbol,side,order)
-        monto_trade = self.market_adapter.order_manager.calculate_amount(order["amount"],symbol,order["leverage"])
-        self.market_adapter.order_manager.create_order(symbol,side,monto_trade,
+        risk_dict = adapter.order_manager.set_risk_management(symbol,side,order)
+        monto_trade = adapter.order_manager.calculate_amount(order["amount"],symbol,order["leverage"])
+        adapter.order_manager.create_order(symbol,side,monto_trade,
                             take_profit  = risk_dict["take_profit_price"],
                             stop_loss = risk_dict["stop_loss_price"],
                             leverage = risk_management["leverage"])
@@ -227,12 +255,12 @@ class ComplexEventProcessing:
         actual = risk_dict["actual_price"]
         self.logger.write("MARKET",f"{accion} {symbol} at {actual} X{leverage}")
 
-    def close_trade(self,symbol):
-        posiciones = self.market_adapter.order_manager.get_posiciones()
+    def close_trade(self,symbol,adapter):
+        posiciones = adapter.order_manager.get_posiciones()
 
         symbols = [par["symbol"] for par in posiciones]
         
-        
+        leverage = self.strategy.risk_management["leverage"]
         while symbol in symbols:
                 pos = [par for par in posiciones if par["symbol"] == symbol][0]
                 print(pos)
@@ -243,12 +271,13 @@ class ComplexEventProcessing:
                 else:
                     side = -1
                 try :
-                    self.market_adapter.order_manager.close_position(symbol,amount,side*-1)
+                    adapter.order_manager.close_position(symbol,amount,side*-1,leverage)
                 except:
-                    self.market_adapter.order_manager.close_position(symbol,amount,side)
-                posiciones = self.market_adapter.order_manager.get_posiciones()
+                    adapter.order_manager.close_position(symbol,amount,side,leverage)
+
+                posiciones = adapter.order_manager.get_posiciones()
                 symbols = [par["symbol"] for par in posiciones]
-        self.market_adapter.order_manager.eliminar_orden(symbol)
+        adapter.order_manager.eliminar_orden(symbol)
         self.logger.write("MARKET",f"{symbol}  position closed")
 
     def process_events(self,queue):
@@ -300,20 +329,16 @@ class ComplexEventProcessing:
                 self.telegram_bot.enviar_mensaje(mensaje)
         return queue
 if __name__ == '__main__':
-    # asyncio.run(streaming())
+
     ma =MarketAdapter(ADAPTERS_DICT)
     tg_bot = TelegramMessager(CARPETA_APIS)
     cep = ComplexEventProcessing(ma,tg_bot)
+    # evento = threading.Event()
+    # # evento.set()
+    # cep.manage_strategies()
     cep.main_event()
 
-    # logger.write("MARKET","buy BTCUSDT at 50000")
 
 
-
-    # print(cep.market_adapter.order_manager.get_posiciones()[0])
-    # # cep.send_trade("BTCUSDT",-1)
-    # # print("Trade enviado")
-    # # time.sleep(20)
-    # cep.close_trade("BTCUSDT")
 
 

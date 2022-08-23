@@ -460,9 +460,9 @@ class TripleTimeBands(Strategy):
         self.timeframe = "15m"
         self.broker = "BinanceFutures"
 
-        self.risk_management = {"pos_sizing":0.05,"take_profit":0.7,"stop_loss":0.1,"leverage":10}
+        self.risk_management = {"pos_sizing":0.05,"take_profit":0.05,"stop_loss":0.01,"leverage":15}
         self.max_posiciones = 3
-
+        self.dollar_amount = 3
     def math(self,dataset):
         new_dataset = {}
         self.dataset_macro = {}
@@ -629,7 +629,7 @@ class TripleTimeBands(Strategy):
             sl = self.risk_management["stop_loss"]
             leverage = self.risk_management["leverage"]
 
-            amount = 5
+            amount = self.dollar_amount
             dict_order = {"symbol":symbol,"take_profit":tp,"stop_loss":sl,"leverage":leverage,"amount":amount,"side":side}
             orders.append(dict_order)
         return orders
